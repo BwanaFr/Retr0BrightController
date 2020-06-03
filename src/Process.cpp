@@ -1,8 +1,8 @@
 #include "Process.h"
 
-#define INITIAL_KP 2
-#define INITIAL_KI 2
-#define INITIAL_KD 1
+#define INITIAL_KP 1
+#define INITIAL_KI 0.8
+#define INITIAL_KD 0.5
 
 //Outputs
 //Pump is at pin 3

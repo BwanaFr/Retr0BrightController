@@ -43,9 +43,11 @@ public:
     }
     void startAction();
     inline bool isRunning() const { return m_running; }
+
 private:
     virtual bool doAction(LiquidCrystal_I2C&, Button::State& /*upState*/,
                         Button::State& /*dwState*/, Button::State& /*selState*/) = 0;
+    inline virtual void doStartAction(){};
     const char* m_name;
     MenuEntry* m_previous;
     MenuEntry* m_next;

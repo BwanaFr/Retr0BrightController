@@ -17,7 +17,6 @@ public:
     
     bool doAction(LiquidCrystal_I2C&, Button::State& /*upState*/,
                     Button::State& /*dwState*/, Button::State& /*selState*/){
-        Serial.println("Starting action...");
         Process::process.setState(Process::State::RUNNING);
         return false;
     };
@@ -77,11 +76,12 @@ public:
 class CfgTemperature : public MenuEntry {
 private:
     double m_temperature;
-    bool m_tempUpated = true;
+    bool m_tempUpated;
 public:
     CfgTemperature(MenuEntry* previous = nullptr) : 
         MenuEntry("Temperature", previous),
-        m_temperature(Process::process.getTargetTemp())
+        m_temperature(Process::process.getTargetTemp()),
+        m_tempUpated(true)
     {
     }
     
@@ -89,9 +89,11 @@ public:
                     Button::State& dwState, Button::State& selState){
         if(selState == Button::State::SHORT){
             Serial.println("Cancelled");
+            m_tempUpated = true;
             return false;
         }else if(selState == Button::State::PRESSED_LONG){
             Process::process.setTargetTemp(m_temperature);
+            m_tempUpated = true;
             return false;
         }else if(upState == Button::State::SHORT ||
             upState == Button::State::PRESSED_LONG){
@@ -142,7 +144,15 @@ public:
             m_firstCall = false;
         }
         cfgMenu.execute(l, upState, dwState, selState);
-        return cfgMenu.isActive();
+        bool active = cfgMenu.isActive();
+        if(!active){
+            m_firstCall = false;
+        }
+        return active;
+    }
+
+    void doStartAction(){
+        m_firstCall = true;
     }
 };
 
@@ -253,7 +263,6 @@ void Menu::execute(LiquidCrystal_I2C& lcd, Button::State& upState,
     if(selState == Button::State::SHORT){
         m_active = true;
         if(m_selectedMenu == nullptr){
-            Serial.println("Menu woke up by key-press");
             activateMenu(lcd);
             return;
         }
@@ -263,7 +272,7 @@ void Menu::execute(LiquidCrystal_I2C& lcd, Button::State& upState,
 }
 void MenuEntry::startAction() { 
     m_running = true;
-    Serial.println("Starting action");
+    doStartAction();
 }
 
 void Menu::activateMenu(LiquidCrystal_I2C& lcd)
@@ -317,7 +326,8 @@ void LCDMenu::setup(){
     m_selBtn.setup();
 }
 
-Button::State prevState = Button::State::IDLE;
+static const char animation[] = "|/-";
+#define ANIMATION_LEN 3
 
 void LCDMenu::loop(){
     unsigned int now = millis();
@@ -325,26 +335,17 @@ void LCDMenu::loop(){
     Button::State dwState = m_dwBtn.getState(now);
     Button::State selState = m_selBtn.getState(now);
     Process::State state = Process::process.getState();
-    if(selState != prevState){
-        Serial.print("New state : ");
-        Serial.println(((int)selState));
-        prevState = selState;
-    }
+    static bool menuActive = false;
+    static uint8_t animationStep = 0;
     if(m_actualMenu != nullptr){
         m_actualMenu->execute(m_lcd, upState, dwState, selState);
-    
-        if(!m_actualMenu->isActive()){
-            if(state == Process::State::IDLE){
-                m_lcd.setCursor(0, 1);
-                m_lcd.print(F("   Retr0bright  "));
-            }else if(state == Process::State::RUNNING){
-                m_lcd.setCursor(0,1);
-                m_lcd.print(F("Run : "));
-                m_lcd.print(Process::process.getTargetTemp());
-                m_lcd.print((char)223);
-                m_lcd.print(F("C"));
-            }
+        bool active = m_actualMenu->isActive();
+        if(!active && menuActive){
+            m_lastUpdate = 0;
         }
+        menuActive = active;
+    }else{
+        menuActive = false;
     }
     if(state == Process::State::IDLE){
         if((m_lastUpdate == 0)  || 
@@ -381,9 +382,29 @@ void LCDMenu::loop(){
         m_lcd.print(temp);
         m_lcd.setCursor(13, 0);
         if(Process::process.isPumpOn()){
-            m_lcd.print("ON ");
+            m_lcd.print(F("ON "));
         }else{
-            m_lcd.print("OFF");
+            m_lcd.print(F("OFF"));
+        }
+
+        if(!menuActive){
+            if(state == Process::State::IDLE){
+                m_lcd.setCursor(0, 1);
+                m_lcd.print(F("   Retr0bright  "));
+            }else if(state == Process::State::RUNNING){
+                m_lcd.setCursor(0,1);
+                m_lcd.print(F("Run : "));
+                m_lcd.print(static_cast<int>(Process::process.getTargetTemp()));
+                m_lcd.print((char)223);
+                m_lcd.print(F("C"));
+                m_lcd.setCursor(15,1);
+                uint8_t step = animationStep>>1;
+                m_lcd.print(animation[step]);
+                ++animationStep;
+                if((animationStep>>1) == ANIMATION_LEN){
+                    animationStep = 0;
+                }
+            }
         }
         m_lastUpdate = now;
     }
