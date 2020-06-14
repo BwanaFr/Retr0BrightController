@@ -66,13 +66,13 @@ Process::Process(uint8_t thPin,
             m_oneWire(thPin), m_tempSensor(&m_oneWire),
             m_tempResolution(resolution), m_lastTempRead(0), m_tempReadDelay(0),
             m_pid(&m_temperature, &m_pidOutput, &m_tempTarget, INITIAL_KP, INITIAL_KI, INITIAL_KD, DIRECT),
-            m_autoTune(&m_temperature, &m_pidOutput)
+            m_autoTune(&m_temperature, &m_pidOutput), m_error(nullptr)
 {
 }
 
 void Process::setState(State state)
 {
-    if(m_state == State::NO_SENSOR){
+    if(m_state == State::ERROR){
         return;
     }
     if(state == State::IDLE){
@@ -85,6 +85,7 @@ void Process::setState(State state)
         m_pidWindowStartTime = millis();
         m_pid.SetMode(AUTOMATIC);
     }else if(state == State::PID_AUTOTUNE){
+         m_pumpOn = true;
         // set up the auto-tune parameters
         m_autoTune.SetNoiseBand(aTuneNoise);
         m_autoTune.SetOutputStep(aTuneStep);
@@ -115,7 +116,7 @@ void Process::setup()
 
 void Process::loop()
 {
-    if(m_state == State::NO_SENSOR){
+    if(m_state == State::ERROR){
         setHeater(LOW);
         return;
     }
@@ -124,10 +125,16 @@ void Process::loop()
     {
         float tempC = m_tempSensor.getTempCByIndex(0);
         if(tempC == DEVICE_DISCONNECTED_C){
-            m_state = State::NO_SENSOR;
+            m_state = State::ERROR;
+            m_error = F("T Read error");
             return;
         }
         m_temperature = tempC;
+        if(m_temperature > 100){
+            m_state = State::ERROR;
+            m_error = F("Too hot");
+            return;
+        }
         m_tempSensor.requestTemperatures();
         m_lastTempRead = now;
     }
@@ -148,7 +155,7 @@ void Process::loop()
 
             // Persist any changed parameters to EEPROM
             saveParameters();
-            setState(State::RUNNING);
+            setState(State::IDLE);
         }
     }
     if(m_state != State::IDLE) {

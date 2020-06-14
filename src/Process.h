@@ -9,7 +9,7 @@
 
 class Process {
 public:
-    enum class State {IDLE, RUNNING, PID_AUTOTUNE, NO_SENSOR};
+    enum class State {IDLE, RUNNING, PID_AUTOTUNE, ERROR};
 
     inline State getState() { return m_state; }
     void setState(State state);
@@ -22,6 +22,7 @@ public:
 
     void setup();
     void loop();
+    inline const __FlashStringHelper * getError() { return m_error; }
 
     static Process process;
 private:
@@ -50,6 +51,7 @@ private:
     unsigned long m_tempReadDelay;      //Delay before each temperature read
     PID m_pid;                          //PID controller
     PID_ATune m_autoTune;               //PID autotuner
+    const __FlashStringHelper *m_error; //Error msg
 };
 
 #endif

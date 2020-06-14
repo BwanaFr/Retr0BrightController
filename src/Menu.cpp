@@ -343,13 +343,25 @@ static const char animation[] = "|/-";
 #define ANIMATION_LEN 3
 
 void LCDMenu::loop(){
-    unsigned int now = millis();
+    static bool menuActive = false;
+    static uint8_t animationStep = 0;
+    static uint8_t runSec = 0;
+    static uint8_t runMin = 0;
+    static uint8_t runHours = 0;
+    static unsigned long lastTimeRead = 0;
+    static enum {TARGET, TIME} runDispState = TARGET;
+    static uint8_t runDispCount = 0;
+
+    unsigned long now = millis();
     Button::State upState = m_upBtn.getState(now);
     Button::State dwState = m_dwBtn.getState(now);
     Button::State selState = m_selBtn.getState(now);
     Process::State state = Process::process.getState();
-    static bool menuActive = false;
-    static uint8_t animationStep = 0;
+    bool stateChanged = false;
+    if((m_lastPState != state) || (m_lastUpdate == 0)){
+        stateChanged = true;
+    }
+    //Execute menu if applicable
     if(m_actualMenu != nullptr){
         m_actualMenu->execute(m_lcd, upState, dwState, selState);
         bool active = m_actualMenu->isActive();
@@ -360,32 +372,138 @@ void LCDMenu::loop(){
     }else{
         menuActive = false;
     }
-    if(state == Process::State::IDLE){
-        if((m_lastUpdate == 0)  || 
-            (m_lastPState != Process::State::IDLE)){
-            idleMenu.resetMenu();
-            //Back to IDLE state
-            m_lcd.clear();
-            m_lcd.setCursor(0, 0);  
-            m_lcd.print(F("T:"));
-            m_lcd.setCursor(5, 0);
-            m_lcd.print((char)223);
-            m_lcd.print(F("C"));
-            m_lcd.setCursor(8, 0);
-            m_lcd.print(F("Pump:"));
-            m_lastUpdate = 0;
+    //Re-render first line and reset menus if state changed
+    if(stateChanged){
+        m_lcd.clear();
+        renderFirstLine(state);
+        m_lastUpdate = 0;
+        if(state == Process::State::IDLE){
+            runSec = 0;
+            runMin = 0;
+            runHours = 0;
+            lastTimeRead = now;
             m_actualMenu = &::idleMenu;
+        }else if(state == Process::State::ERROR){
+            m_actualMenu = nullptr;
+        }else{
+            if(m_lastPState != Process::State::RUNNING){
+                m_actualMenu = &::runningMenu;
+            }
         }
-    }else if(state == Process::State::NO_SENSOR){
-        m_actualMenu = nullptr;
-    }else{
-        if(m_lastPState != Process::State::RUNNING){
-            runningMenu.resetMenu();
-            m_actualMenu = &::runningMenu;
+        if(m_actualMenu != nullptr){
+            m_actualMenu->resetMenu();
         }
     }
-    
+
     if(now - m_lastUpdate > LCD_UPDATE){
+        printProcessValues(state);
+        if(!menuActive){
+            bool showAnimation = false;
+            if(state == Process::State::IDLE){
+                m_lcd.setCursor(0,1);
+                m_lcd.print(F("   Retr0bright  "));
+            }else if(state == Process::State::RUNNING){
+                //Compute time
+                if((now - lastTimeRead) > 1000){
+                    ++runSec;
+                    if(runSec>59){
+                        runSec = 0;
+                        ++runMin;
+                        if(runMin>59){
+                            runMin = 0;
+                            ++runHours;
+                        }
+                    }
+                    lastTimeRead = now;
+                } 
+                
+                ++runDispCount;
+                if(runDispCount>50){
+                    runDispState = runDispState == TARGET ? TIME : TARGET;
+                    runDispCount = 0;
+                }
+                m_lcd.setCursor(0,1);
+                switch(runDispState){
+                    case TARGET:
+                    {
+                        m_lcd.print(F("Run : "));
+                        int targetTemp = static_cast<int>(Process::process.getTargetTemp());
+                        if(targetTemp<10){
+                            m_lcd.print(" ");
+                        }
+                        if(targetTemp<100){
+                            m_lcd.print(" ");
+                        }
+                        m_lcd.print(targetTemp);
+                        m_lcd.print((char)223);
+                        m_lcd.print(F("C    "));
+                    }
+                    break;
+                    case TIME:
+                        m_lcd.print(F("Time: "));
+                        if(runHours<10)
+                            m_lcd.print(F("0"));
+                        m_lcd.print(runHours);
+                        m_lcd.print(F(":"));
+                        if(runMin<10)
+                            m_lcd.print(F("0"));
+                        m_lcd.print(runMin);
+                        m_lcd.print(F(":"));
+                        if(runSec<10)
+                            m_lcd.print(F("0"));
+                        m_lcd.print(runSec);
+                        m_lcd.print(F("    "));
+                        break;
+                }
+                
+                showAnimation = true;
+            }else if(state == Process::State::PID_AUTOTUNE){
+                m_lcd.setCursor(0,1);
+                m_lcd.print(F("  PID autotune "));
+                showAnimation = true;
+            }else if(state == Process::State::ERROR){
+                m_lcd.setCursor(0,1);
+                m_lcd.print(Process::process.getError());
+            }
+            if(showAnimation){
+                m_lcd.setCursor(15,1);
+                uint8_t step = animationStep>>2;
+                m_lcd.print(animation[step]);
+                ++animationStep;
+                if((animationStep>>2) >= ANIMATION_LEN){
+                    animationStep = 0;
+                }
+            }
+        }
+        m_lastUpdate = now;
+    }
+    m_lastPState  = state;
+}
+
+void LCDMenu::renderFirstLine(Process::State state){
+    switch (state)
+    {
+    case Process::State::IDLE:
+    case Process::State::RUNNING:
+    case Process::State::PID_AUTOTUNE:
+        m_lcd.setCursor(0, 0);  
+        m_lcd.print(F("T:"));
+        m_lcd.setCursor(5, 0);
+        m_lcd.print((char)223);
+        m_lcd.print(F("C"));
+        m_lcd.setCursor(8, 0);
+        m_lcd.print(F("Pump:"));
+        break;
+    case Process::State::ERROR:
+        m_lcd.setCursor(0, 0);
+        m_lcd.print(F("     ERROR      "));
+    default:
+        break;
+    }
+}
+
+void LCDMenu::printProcessValues(Process::State state){
+    if(state != Process::State::ERROR){
         int temp = Process::process.getActualTemp();
         m_lcd.setCursor(2,0);
         if(temp<10){
@@ -401,42 +519,5 @@ void LCDMenu::loop(){
         }else{
             m_lcd.print(F("OFF"));
         }
-
-        if(!menuActive){
-            if(state == Process::State::IDLE){
-                m_lcd.setCursor(0,1);
-                m_lcd.print(F("   Retr0bright  "));
-            }else if(state == Process::State::RUNNING){
-                m_lcd.setCursor(0,1);
-                m_lcd.print(F("Run : "));
-                m_lcd.print(static_cast<int>(Process::process.getTargetTemp()));
-                m_lcd.print((char)223);
-                m_lcd.print(F("C"));
-                m_lcd.setCursor(15,1);
-                uint8_t step = animationStep>>1;
-                m_lcd.print(animation[step]);
-                ++animationStep;
-                if((animationStep>>1) == ANIMATION_LEN){
-                    animationStep = 0;
-                }
-            }else if(state == Process::State::PID_AUTOTUNE){
-                m_lcd.setCursor(0,1);
-                m_lcd.print(F("  PID autotune "));
-                m_lcd.setCursor(15,1);
-                uint8_t step = animationStep>>1;
-                m_lcd.print(animation[step]);
-                ++animationStep;
-                if((animationStep>>1) == ANIMATION_LEN){
-                    animationStep = 0;
-                }
-            }else if(state == Process::State::NO_SENSOR){
-                m_lcd.setCursor(0,0);
-                m_lcd.print(F("   Retr0bright  "));
-                m_lcd.setCursor(0,1);
-                m_lcd.print(F("   No sensor!   "));
-            }
-        }
-        m_lastUpdate = now;
     }
-    m_lastPState  = state;
 }

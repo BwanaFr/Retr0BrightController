@@ -86,12 +86,14 @@ public:
                     Button::State& dwState, Button::State& selState);
     
 private:
+    void renderFirstLine(Process::State state);
+    void printProcessValues(Process::State state);
     LiquidCrystal_I2C m_lcd;
     Button m_upBtn;
     Button m_dwBtn;
     Button m_selBtn;
     Menu* m_actualMenu;
-    unsigned int m_lastUpdate;
+    unsigned long m_lastUpdate;
     Process::State m_lastPState;
     
 };
