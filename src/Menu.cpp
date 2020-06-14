@@ -60,12 +60,9 @@ public:
             l.print(F("OFF "));
         }
         if(selState == Button::State::PRESSED_LONG){
-            Serial.print("Setting pump : ");
-            Serial.println(pump);
             Process::process.setPumpState(pump);
             return false;
         }else if(selState == Button::State::SHORT){
-            Serial.println("Cancelled");
             return false;
         }
         //Still active
@@ -124,7 +121,23 @@ public:
         return true;
     };
 }; 
-static CfgTemperature tempCfgMenu(nullptr); 
+
+class PIDAutoAction : public MenuEntry {
+public:
+    PIDAutoAction(MenuEntry* previous = nullptr) : 
+        MenuEntry("PID autotune", previous)
+    {
+    }
+    
+    bool doAction(LiquidCrystal_I2C&, Button::State& /*upState*/,
+                    Button::State& /*dwState*/, Button::State& /*selState*/){
+        Process::process.setState(Process::State::PID_AUTOTUNE);
+        return false;
+    };
+};
+
+static CfgTemperature tempCfgMenu(nullptr);
+static PIDAutoAction pidAutoCfgMenu(&tempCfgMenu); 
 static Menu cfgMenu(&tempCfgMenu);
 
 class SetupAction : public MenuEntry {
@@ -363,6 +376,8 @@ void LCDMenu::loop(){
             m_lastUpdate = 0;
             m_actualMenu = &::idleMenu;
         }
+    }else if(state == Process::State::NO_SENSOR){
+        m_actualMenu = nullptr;
     }else{
         if(m_lastPState != Process::State::RUNNING){
             runningMenu.resetMenu();
@@ -389,7 +404,7 @@ void LCDMenu::loop(){
 
         if(!menuActive){
             if(state == Process::State::IDLE){
-                m_lcd.setCursor(0, 1);
+                m_lcd.setCursor(0,1);
                 m_lcd.print(F("   Retr0bright  "));
             }else if(state == Process::State::RUNNING){
                 m_lcd.setCursor(0,1);
@@ -404,6 +419,21 @@ void LCDMenu::loop(){
                 if((animationStep>>1) == ANIMATION_LEN){
                     animationStep = 0;
                 }
+            }else if(state == Process::State::PID_AUTOTUNE){
+                m_lcd.setCursor(0,1);
+                m_lcd.print(F("  PID autotune "));
+                m_lcd.setCursor(15,1);
+                uint8_t step = animationStep>>1;
+                m_lcd.print(animation[step]);
+                ++animationStep;
+                if((animationStep>>1) == ANIMATION_LEN){
+                    animationStep = 0;
+                }
+            }else if(state == Process::State::NO_SENSOR){
+                m_lcd.setCursor(0,0);
+                m_lcd.print(F("   Retr0bright  "));
+                m_lcd.setCursor(0,1);
+                m_lcd.print(F("   No sensor!   "));
             }
         }
         m_lastUpdate = now;
