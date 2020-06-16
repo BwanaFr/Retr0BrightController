@@ -137,21 +137,23 @@ void Process::loop()
             return;
         }
         m_temperature = tempC;
-        //Check temperature
-        if(m_temperature > 100){
-            m_state = State::ERROR;
-            m_error = F("Too hot");
-            return;
-        }
-        if(abs(m_temperature-m_tempTarget)<tempMargin){
-            //Temperature in range
-            m_lastTempReached = now;
-        }else{
-            //Temperature not in range
-            if(now - m_lastTempReached>tempHeatMaxTime){
+        if(m_state != State::IDLE){
+            //Check temperature
+            if(m_temperature > 100){
                 m_state = State::ERROR;
-                m_error = F("T not reached");
+                m_error = F("Too hot");
                 return;
+            }
+            if(abs(m_temperature-m_tempTarget)<tempMargin){
+                //Temperature in range
+                m_lastTempReached = now;
+            }else{
+                //Temperature not in range
+                if(now - m_lastTempReached>tempHeatMaxTime){
+                    m_state = State::ERROR;
+                    m_error = F("T not reached");
+                    return;
+                }
             }
         }
         //Plan next temperature readout
