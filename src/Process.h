@@ -49,6 +49,7 @@ private:
     int m_tempResolution;               //DS18B20 resolution
     unsigned long m_lastTempRead;       //Last temperature readout
     unsigned long m_tempReadDelay;      //Delay before each temperature read
+    unsigned long m_lastTempReached;    //Last temperature reached
     PID m_pid;                          //PID controller
     PID_ATune m_autoTune;               //PID autotuner
     const __FlashStringHelper *m_error; //Error msg

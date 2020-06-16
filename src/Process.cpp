@@ -27,6 +27,10 @@ const double aTuneStep = 500;
 const double aTuneNoise = 1;
 const unsigned int aTuneLookBack = 20;
 
+const double tempMargin = 5;
+//Maximum time allowed to reach temperature (5 minutes)
+const unsigned long tempHeatMaxTime = 300000;
+
 //Instance (singleton)
 Process Process::process(TH_PIN, PUMP, HEATER);
 
@@ -64,7 +68,8 @@ Process::Process(uint8_t thPin,
             m_temperature(0), m_tempTarget(50),
             m_pidOutput(0), m_pidWindowSize(1000), m_pidWindowStartTime(0),
             m_oneWire(thPin), m_tempSensor(&m_oneWire),
-            m_tempResolution(resolution), m_lastTempRead(0), m_tempReadDelay(0),
+            m_tempResolution(resolution), m_lastTempRead(0),
+            m_tempReadDelay(0), m_lastTempReached(0),
             m_pid(&m_temperature, &m_pidOutput, &m_tempTarget, INITIAL_KP, INITIAL_KI, INITIAL_KD, DIRECT),
             m_autoTune(&m_temperature, &m_pidOutput), m_error(nullptr)
 {
@@ -82,7 +87,9 @@ void Process::setState(State state)
         m_pid.SetMode(MANUAL);
     }else if(state == State::RUNNING){
         m_pumpOn = true;
-        m_pidWindowStartTime = millis();
+        unsigned long now = millis();
+        m_pidWindowStartTime = now;
+        m_lastTempReached = now;
         m_pid.SetMode(AUTOMATIC);
     }else if(state == State::PID_AUTOTUNE){
          m_pumpOn = true;
@@ -121,20 +128,33 @@ void Process::loop()
         return;
     }
     unsigned long now = millis();
-    if (millis() - m_lastTempRead >= m_tempReadDelay)
+    if (now - m_lastTempRead >= m_tempReadDelay)
     {
         float tempC = m_tempSensor.getTempCByIndex(0);
         if(tempC == DEVICE_DISCONNECTED_C){
             m_state = State::ERROR;
-            m_error = F("T Read error");
+            m_error = F("T read error");
             return;
         }
         m_temperature = tempC;
+        //Check temperature
         if(m_temperature > 100){
             m_state = State::ERROR;
             m_error = F("Too hot");
             return;
         }
+        if(abs(m_temperature-m_tempTarget)<tempMargin){
+            //Temperature in range
+            m_lastTempReached = now;
+        }else{
+            //Temperature not in range
+            if(now - m_lastTempReached>tempHeatMaxTime){
+                m_state = State::ERROR;
+                m_error = F("T not reached");
+                return;
+            }
+        }
+        //Plan next temperature readout
         m_tempSensor.requestTemperatures();
         m_lastTempRead = now;
     }
