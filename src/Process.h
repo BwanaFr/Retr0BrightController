@@ -18,7 +18,7 @@ public:
     void setPumpState(bool state);
     inline double getActualTemp() { return m_temperature; }
     inline double getTargetTemp() { return m_tempTarget; }
-    inline void setTargetTemp(double target) { m_tempTarget = target; }
+    void setTargetTemp(double target);
 
     void setup();
     void loop();

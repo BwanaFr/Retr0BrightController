@@ -227,3 +227,8 @@ void Process::setHeater(uint8_t out) {
     digitalWrite(m_heaterPin, out);
     digitalWrite(LED_BUILTIN, out);
 }
+
+void Process::setTargetTemp(double target) { 
+    m_tempTarget = target;
+    saveParameters();
+}
