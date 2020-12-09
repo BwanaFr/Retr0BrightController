@@ -59,10 +59,10 @@ public:
         }else{
             l.print(F("OFF "));
         }
-        if(selState == Button::State::PRESSED_LONG){
+        if(selState == Button::State::SHORT){
             Process::process.setPumpState(pump);
             return false;
-        }else if(selState == Button::State::SHORT){
+        }else if(selState == Button::State::PRESSED_LONG){
             return false;
         }
         //Still active
@@ -75,6 +75,8 @@ private:
     double m_temperature;
     bool m_tempUpated;
 public:
+    inline void setTemperature(double temp){m_temperature = temp;}
+
     CfgTemperature(MenuEntry* previous = nullptr) : 
         MenuEntry("Temperature", previous),
         m_temperature(Process::process.getTargetTemp()),
@@ -84,11 +86,10 @@ public:
     
     bool doAction(LiquidCrystal_I2C& l, Button::State& upState,
                     Button::State& dwState, Button::State& selState){
-        if(selState == Button::State::SHORT){
-            Serial.println("Cancelled");
+        if(selState == Button::State::PRESSED_LONG){
             m_tempUpated = true;
             return false;
-        }else if(selState == Button::State::PRESSED_LONG){
+        }else if(selState == Button::State::SHORT){
             Process::process.setTargetTemp(m_temperature);
             m_tempUpated = true;
             return false;
@@ -127,6 +128,8 @@ private:
     int m_pump;
     bool m_pumpUpated;
 public:
+    inline void setPumpValue(int value){m_pump = value;}
+
     CfgPump(MenuEntry* previous = nullptr) : 
         MenuEntry("Pump", previous),
         m_pump(Process::process.getPumpTarget()),
@@ -136,10 +139,10 @@ public:
     
     bool doAction(LiquidCrystal_I2C& l, Button::State& upState,
                     Button::State& dwState, Button::State& selState){
-        if(selState == Button::State::SHORT){
+        if(selState == Button::State::PRESSED_LONG){
             m_pumpUpated = true;
             return false;
-        }else if(selState == Button::State::PRESSED_LONG){
+        }else if(selState == Button::State::SHORT){
             Process::process.setPumpTarget(m_pump);
             m_pumpUpated = true;
             return false;
@@ -392,6 +395,9 @@ void LCDMenu::setup(){
     m_upBtn.setup();
     m_dwBtn.setup();
     m_selBtn.setup();
+    //Values are loaded now, so update menu with them
+    setTargetPump(Process::process.getPumpTarget());
+    setTargetTemperature(Process::process.getTargetTemp());
 }
 
 static const char animation[] = "|/-";
@@ -582,4 +588,14 @@ void LCDMenu::printProcessValues(Process::State state){
             m_lcd.print(F("OFF"));
         }
     }
+}
+
+void LCDMenu::setTargetTemperature(double temperature)
+{
+    tempCfgMenu.setTemperature(temperature);
+}
+
+void LCDMenu::setTargetPump(int pump)
+{
+    pumpCfgMenu.setPumpValue(pump);
 }

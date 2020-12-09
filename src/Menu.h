@@ -79,12 +79,8 @@ public:
             uint8_t upBtn, uint8_t dwBtn, uint8_t selBtn);
     void loop();
     void setup();
-
-    static bool startAction(LCDMenu* p, Button::State& /*upState*/,
-                    Button::State& /*dwState*/, Button::State& /*selState*/);
-    static bool pumpAction(LCDMenu* l, Button::State& upState,
-                    Button::State& dwState, Button::State& selState);
-    
+    void setTargetTemperature(double temperature);
+    void setTargetPump(int pump);
 private:
     void renderFirstLine(Process::State state);
     void printProcessValues(Process::State state);
