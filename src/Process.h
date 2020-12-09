@@ -14,8 +14,10 @@ public:
     inline State getState() { return m_state; }
     void setState(State state);
 
-    inline bool isPumpOn() { return m_pumpOn; }
+    inline int getPumpValue() { return m_pumpValue; }
     void setPumpState(bool state);
+    void setPumpTarget(int target);
+    inline int getPumpTarget() { return m_pumpTarget; }
     inline double getActualTemp() { return m_temperature; }
     inline double getTargetTemp() { return m_tempTarget; }
     void setTargetTemp(double target);
@@ -33,8 +35,8 @@ private:
     uint8_t m_pumpPin;                  //Pin used for pump
     uint8_t m_heaterPin;                //Pin used for heater
     State m_state;                      //Actual state
-    bool m_pumpOn;                      //Is pump on
-
+    int m_pumpValue;                    //Actual pump value
+    int m_pumpTarget;                   //Pump set point
     double m_temperature;               //Actual temperature
     double m_tempTarget;                //Temperature setpoint
     double m_pidOutput;                 //PID output

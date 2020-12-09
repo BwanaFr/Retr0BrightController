@@ -22,6 +22,7 @@ const int SpAddress = 8;
 const int KpAddress = 16;
 const int KiAddress = 24;
 const int KdAddress = 32;
+const int pumpAddress = 40;
 
 const double aTuneStep = 500;
 const double aTuneNoise = 1;
@@ -60,11 +61,37 @@ double EEPROM_readDouble(int address)
    return value;
 }
 
+// ************************************************
+// Write int values to EEPROM
+// ************************************************
+void EEPROM_writeInt(int address, int value)
+{
+   byte* p = (byte*)(void*)&value;
+   for (unsigned int i = 0; i < sizeof(value); i++)
+   {
+      EEPROM.write(address++, *p++);
+   }
+}
+ 
+// ************************************************
+// Read int values from EEPROM
+// ************************************************
+int EEPROM_readInt(int address)
+{
+   int value = 0;
+   byte* p = (byte*)(void*)&value;
+   for (unsigned int i = 0; i < sizeof(value); i++)
+   {
+      *p++ = EEPROM.read(address++);
+   }
+   return value;
+}
+
 
 Process::Process(uint8_t thPin,
             uint8_t pumpPin, uint8_t heaterPin, int resolution) : 
             m_pumpPin(pumpPin), m_heaterPin(heaterPin),
-            m_state(State::IDLE), m_pumpOn(false),
+            m_state(State::IDLE), m_pumpTarget(255),
             m_temperature(0), m_tempTarget(50),
             m_pidOutput(0), m_pidWindowSize(1000), m_pidWindowStartTime(0),
             m_oneWire(thPin), m_tempSensor(&m_oneWire),
@@ -80,26 +107,26 @@ void Process::setState(State state)
     if(m_state == State::ERROR){
         return;
     }
+    bool pumpOn = false;
     if(state == State::IDLE){
-        m_pumpOn = false;
         //Turn heater off
         setHeater(LOW);
         m_pid.SetMode(MANUAL);
     }else if(state == State::RUNNING){
-        m_pumpOn = true;
+        pumpOn = true;
         unsigned long now = millis();
         m_pidWindowStartTime = now;
         m_lastTempReached = now;
         m_pid.SetMode(AUTOMATIC);
     }else if(state == State::PID_AUTOTUNE){
-         m_pumpOn = true;
+        //Activate the pump during PID auto-tune
+        pumpOn = true;
         // set up the auto-tune parameters
         m_autoTune.SetNoiseBand(aTuneNoise);
         m_autoTune.SetOutputStep(aTuneStep);
         m_autoTune.SetLookbackSec((int)aTuneLookBack);
     }
-    //Turn pump on
-    digitalWrite(m_pumpPin, m_pumpOn);
+    setPumpState(pumpOn);
     m_state = state;
 }
 
@@ -196,8 +223,30 @@ void Process::loop()
 }
 
 void Process::setPumpState(bool state) {
-    m_pumpOn = state;
-    digitalWrite(m_pumpPin, state);
+    if(state){
+        m_pumpValue = m_pumpTarget;
+    }else{
+        m_pumpValue = 0;
+    }
+    if(m_pumpValue<0){
+        m_pumpValue = 0;
+    }else if(m_pumpValue>255){
+        m_pumpValue = 255;
+    }
+    analogWrite(m_pumpPin, m_pumpValue);
+}
+
+void Process::setPumpTarget(int target) {
+    m_pumpTarget = target;
+    if(m_pumpTarget<0){
+        m_pumpTarget = 0;
+    }else if(m_pumpTarget>255){
+        m_pumpTarget = 255;
+    }
+    if(m_pumpValue != 0){
+        setPumpState(true);
+    }
+    saveParameters();
 }
 
 void Process::loadParameters() {
@@ -212,6 +261,7 @@ void Process::loadParameters() {
         m_pidKI = EEPROM_readDouble(KiAddress);
         m_pidKP = EEPROM_readDouble(KpAddress);
         m_pidKD = EEPROM_readDouble(KdAddress);
+        m_pumpTarget = EEPROM_readInt(pumpAddress);
     }
 }
 
@@ -221,6 +271,7 @@ void Process::saveParameters() {
     EEPROM_writeDouble(KiAddress, m_pidKI);
     EEPROM_writeDouble(KpAddress, m_pidKP);
     EEPROM_writeDouble(KdAddress, m_pidKD);
+    EEPROM_writeInt(pumpAddress, m_pumpTarget);
 }
 
 void Process::setHeater(uint8_t out) {

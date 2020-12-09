@@ -41,7 +41,7 @@ private:
     bool pump;
 public:
     PumpAction(MenuEntry* previous) : 
-        MenuEntry("Pump", previous), pump(false)
+        MenuEntry("Pump state", previous), pump(false)
     {
     }
     
@@ -122,6 +122,60 @@ public:
     };
 }; 
 
+class CfgPump : public MenuEntry {
+private:
+    int m_pump;
+    bool m_pumpUpated;
+public:
+    CfgPump(MenuEntry* previous = nullptr) : 
+        MenuEntry("Pump", previous),
+        m_pump(Process::process.getPumpTarget()),
+        m_pumpUpated(true)
+    {
+    }
+    
+    bool doAction(LiquidCrystal_I2C& l, Button::State& upState,
+                    Button::State& dwState, Button::State& selState){
+        if(selState == Button::State::SHORT){
+            m_pumpUpated = true;
+            return false;
+        }else if(selState == Button::State::PRESSED_LONG){
+            Process::process.setPumpTarget(m_pump);
+            m_pumpUpated = true;
+            return false;
+        }else if(upState == Button::State::SHORT ||
+            upState == Button::State::PRESSED_LONG){
+                m_pump += 1;
+                if(m_pump>255){
+                    m_pump = 255;
+                }
+                m_pumpUpated = true;
+        }else if(dwState == Button::State::SHORT ||
+            dwState == Button::State::PRESSED_LONG){
+                m_pump -= 1;
+                if(m_pump<0){
+                    m_pump = 0;
+                }
+                m_pumpUpated = true;
+        }
+        if(m_pumpUpated){
+            l.setCursor(0,1);
+            l.print(F("Pump : "));
+            if(m_pump < 10){
+                l.print(F(" "));
+            }
+            if(m_pump < 100){
+                l.print(F(" "));
+            }
+            l.print(m_pump);
+            /*l.print((char)223);
+            l.print(F("C  "));*/
+        }
+        m_pumpUpated = false;
+        return true;
+    };
+}; 
+
 class PIDAutoAction : public MenuEntry {
 public:
     PIDAutoAction(MenuEntry* previous = nullptr) : 
@@ -137,7 +191,8 @@ public:
 };
 
 static CfgTemperature tempCfgMenu(nullptr);
-static PIDAutoAction pidAutoCfgMenu(&tempCfgMenu); 
+static CfgPump pumpCfgMenu(&tempCfgMenu);
+static PIDAutoAction pidAutoCfgMenu(&pumpCfgMenu); 
 static Menu cfgMenu(&tempCfgMenu);
 
 class SetupAction : public MenuEntry {
@@ -514,8 +569,15 @@ void LCDMenu::printProcessValues(Process::State state){
         }
         m_lcd.print(temp);
         m_lcd.setCursor(13, 0);
-        if(Process::process.isPumpOn()){
-            m_lcd.print(F("ON "));
+        int pumpValue = Process::process.getPumpValue();
+        if(pumpValue != 0){
+            if(pumpValue<10){
+                m_lcd.print(F(" "));
+            }
+            if(pumpValue<100){
+                m_lcd.print(F(" "));
+            }
+            m_lcd.print(pumpValue);
         }else{
             m_lcd.print(F("OFF"));
         }
